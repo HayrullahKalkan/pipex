@@ -1,0 +1,243 @@
+// 1. Dosyaları aç
+// 2. pipe() oluştur
+// 3. fork() ile child1
+//      dup2(infile, stdin)
+//      dup2(pipe_write, stdout)
+//      execve(cmd1)
+// 4. fork() ile child2
+//      dup2(pipe_read, stdin)
+//      dup2(outfile, stdout)
+//      execve(cmd2)
+// 5. Parent process
+//      waitpid(child1)
+//      waitpid(child2)
+//      dosya ve pipe kapat
+
+
+Elbette! Şimdi sana **Pipex projesinin tamamını**, hem **mandatory** hem de **bonus** kısmını kapsayacak şekilde, **başlangıçtan sonuna kadar** sistemli ve sade bir şekilde özetleyeceğim. Sanki kendin projeyi yeni yapacakmışsın gibi düşün.
+
+---
+
+# 🧪 42 Pipex Projesi - BAŞTAN SONA ÖZET
+
+---
+
+## 📌 AMAÇ
+
+Shell'deki şu komutu:
+
+```bash
+< infile cmd1 | cmd2 > outfile
+```
+
+C dilinde yeniden yazmak.
+
+Programın şu şekilde çalışacak:
+
+```bash
+./pipex infile "cmd1 args" "cmd2 args" outfile
+```
+
+> Bonus kısmında:
+
+```bash
+./pipex here_doc LIMITER cmd1 cmd2 ... cmdn outfile
+```
+
+---
+
+## 📁 DOSYA YAPISI ÖNERİSİ
+
+```bash
+pipex/
+├── main.c              // argüman kontrolü ve mod belirleme
+├── pipex.h             // header dosyası
+├── arg_check.c         // argüman kontrol fonksiyonu
+├── execute_cmd.c       // execve ile komut çalıştıran fonksiyon
+├── path_utils.c        // PATH çözümleme (envp'den)
+├── here_doc.c          // here_doc bonus özelliği
+├── utils.c             // hata ve cleanup fonksiyonları
+└── Makefile
+```
+
+---
+
+## ✅ 1. `main.c` – Başlangıç noktası
+
+### Görevleri:
+
+* Argüman sayısını kontrol eder (`arguman_check`)
+* Bonus mu, mandatory mi ayırır (`strcmp(argv[1], "here_doc")`)
+* Doğru moda göre fonksiyona yönlendirir (`start_here_doc()` / `start_pipex()`)
+
+---
+
+## ✅ 2. `arguman_check.c` – Argümanları doğrula
+
+### Ne kontrol edilmeli?
+
+| Kontrol                             | Zorunlu?  |
+| ----------------------------------- | --------- |
+| Argüman sayısı yeterli mi           | ✅         |
+| `"here_doc"` modundaysa `argc >= 6` | ✅         |
+| Komutlar boş mu (`""`)              | Opsiyonel |
+| `infile` okunabilir mi              | Opsiyonel |
+
+---
+
+## ✅ 3. `start_pipex()` – Ana Pipex Fonksiyonu (mandatory)
+
+### Ne yapar?
+
+1. `open()` ile `infile` ve `outfile` dosyalarını açar.
+2. `pipe()` ile pipe oluşturur.
+3. `fork()` ile 2 child process başlatır:
+
+   * **Child 1:** `infile` → `cmd1` → `pipe`
+   * **Child 2:** `pipe` → `cmd2` → `outfile`
+4. Her child process:
+
+   * `dup2()` ile yönlendirme yapar (stdin/stdout)
+   * `execve()` ile komutu çalıştırır
+5. Parent:
+
+   * Pipe ve dosyaları kapatır.
+   * `waitpid()` ile çocukları bekler.
+
+---
+
+## ✅ 4. `execute_cmd()` – Komutu çalıştır
+
+### Adımlar:
+
+1. `ft_split()` ile `"ls -l"` → `["ls", "-l", NULL]`
+2. `envp`'den `PATH` değişkenini bul.
+3. `PATH` içindeki her klasörde `cmd` var mı `access()` ile kontrol et.
+4. `execve(full_path, args, envp);`
+5. Başarısız olursa `perror()` + `exit(EXIT_FAILURE)`
+
+---
+
+## ✅ 5. `path_utils.c` – Komut yolu bulma
+
+### Görevleri:
+
+* `envp`'de `PATH=` satırını bul
+* `:` ile böl, örn: `["/usr/bin", "/bin", ...]`
+* `cmd` ile birleştir: `"/usr/bin/ls"` gibi
+* `access(path, X_OK)` ile çalıştırılabilir mi kontrol et
+* İlk çalışan yolu döndür
+
+---
+
+## ✅ 6. `here_doc.c` – Bonus Özellik
+
+### Ne yapar?
+
+```bash
+./pipex here_doc LIMITER cmd1 cmd2 ... cmdN outfile
+```
+
+1. `here_doc` kelimesi varsa bu moda geç
+2. `limiter` gelene kadar kullanıcıdan stdin okur
+3. Geçici dosyaya yazar (`.heredoc_tmp`)
+4. Bu dosyayı `infile` gibi kullan
+5. `outfile` dosyasını `O_APPEND` ile açar
+6. `unlink()` ile geçici dosyayı silmeyi unutma
+
+---
+
+## ✅ 7. `utils.c` – Yardımcı Fonksiyonlar
+
+### Fonksiyonlar:
+
+* `print_error()` → `perror()` + `exit()`
+* `free_split()` → `char **split` belleklerini temizler
+
+---Genelde bu tür bir durumda hatanın sebepleri şunlardan biri olur:
+
+    abc.txt dosyası mevcut değil → open() hatası alırsın.
+
+    execve sırasında komut bulunamıyor → örn. "grep a" yanlış biçimlendirilmiş.
+
+    pipe veya dup2 işlemlerinde yanlış file descriptor kullanımı.
+
+    malloc sonucu bellek sızıntısı veya geçersiz erişim.
+
+
+## ⚙️ KULLANILACAK SİSTEM FONKSİYONLARI
+
+| Kategori         | Fonksiyonlar                        |
+| ---------------- | ----------------------------------- |
+| Dosya işlemleri  | `open`, `close`, `unlink`, `access` |
+| Bellek işlemleri | `malloc`, `free`                    |
+| Process yönetimi | `fork`, `wait`, `waitpid`, `execve` |
+| I/O yönlendirme  | `pipe`, `dup2`, `read`, `write`     |
+| Hata yönetimi    | `perror`, `strerror`, `exit`        |
+
+---
+
+## 💡 TEST ÖRNEKLERİ
+
+```bash
+$> ./pipex infile "grep a" "wc -l" outfile
+$> ./pipex here_doc LIMITER "cat" "wc -c" outfile
+```
+
+---
+
+## ✅ MAKEFILE
+
+```makefile
+NAME = pipex
+
+CC = cc
+CFLAGS = -Wall -Wextra -Werror
+
+SRCS = main.c arg_check.c execute_cmd.c path_utils.c utils.c pipex.c
+BONUS = here_doc.c
+
+OBJS = $(SRCS:.c=.o)
+
+all: $(NAME)
+
+$(NAME): $(OBJS)
+	$(CC) $(CFLAGS) $(OBJS) -o $(NAME)
+
+bonus:
+	$(CC) $(CFLAGS) $(SRCS) $(BONUS) -o $(NAME)
+
+clean:
+	rm -f $(OBJS)
+
+fclean: clean
+	rm -f $(NAME)
+
+re: fclean all
+```
+
+---
+
+## 🔚 ÖZETLE
+
+| Aşama                    | Açıklama                               |
+| ------------------------ | -------------------------------------- |
+| ✅ Argümanları kontrol et | `arguman_check()`                      |
+| ✅ Pipe oluştur           | `pipe()`                               |
+| ✅ Process yarat          | `fork()`                               |
+| ✅ I/O yönlendirme        | `dup2()`                               |
+| ✅ Komutu çalıştır        | `execve()`                             |
+| ✅ Bekle ve temizle       | `waitpid()`, `close()`                 |
+| ✅ Bonus için here\_doc   | `stdin`'den oku, tmp dosya, `O_APPEND` |
+
+---
+
+## 🔧 Yardımcı Olabileceğim Diğer Şeyler
+
+* Fonksiyon fonksiyon birlikte yazmak
+* `execute_cmd()`'i adım adım yapmak
+* `here_doc` kodunu örneklemek
+* Test scripti oluşturmak
+
+Hazırsan bir sonraki adıma geçelim:
+👉 Ne yazmak istersin şimdi? `main.c`, `execute_cmd()`, `path çözümü`?
