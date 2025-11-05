@@ -6,12 +6,30 @@
 /*   By: hakalkan <hakalkan@student.42istanbul.c    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/09/18 19:07:58 by hakalkan          #+#    #+#             */
-/*   Updated: 2025/11/04 05:01:52 by hakalkan         ###   ########.fr       */
+/*   Updated: 2025/11/05 21:42:00 by hakalkan         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "pipex.h"
 
+
+static void	merge_free(t_pipe *pipex)
+{
+	write(2, "Error\n", 6);
+	free_path(pipex->cmd1);
+	free_path(pipex->cmd2);
+	exit(1);
+}
+static void	merge_path_utils(t_pipe *pipex, int flag)
+{
+	write(2, "Error\n", 6);
+	free_path(pipex->path);
+	free_path(pipex->cmd1);
+	free_path(pipex->cmd2);
+	if (flag == 1)
+		free(pipex->cmd1_path);
+	exit(1);
+}
 void	get_path(t_pipe *pipex)
 {
 	int	i;
@@ -25,17 +43,8 @@ void	get_path(t_pipe *pipex)
 		}
 		i++;
 	}
-}
-
-static void	merge_path_utils(t_pipe *pipex, int flag)
-{
-	write(2, "Error\n", 6);
-	free_path(pipex->path);
-	free_path(pipex->cmd1);
-	free_path(pipex->cmd2);
-	if (flag == 1)
-		free(pipex->cmd1_path);
-	exit(1);
+	if (!(pipex->path))
+		merge_free(pipex);
 }
 
 void	merge_path(t_pipe *pipex, int flag)
@@ -78,7 +87,7 @@ int	create_files(char *file_name, int flag)
 	if (fd == -1)
 	{
 		write(2, "Error\n", 6);
-		exit(1);
+		fd = open("/dev/null", O_RDONLY, 0644);
 	}
 	return (fd);
 }
@@ -100,26 +109,29 @@ void	create_fork(t_pipe *pipex)
 	{
 		dup2(pipex->infile, STDIN_FILENO);
 		dup2(pipex->pipe_fd[1], STDOUT_FILENO);
+		close(pipex->pipe_fd[0]);
+		close(pipex->pipe_fd[1]);
 		close(pipex->outfile);
 		close(pipex->infile);
-		close(pipex->pipe_fd[0]);
 		if (execve(pipex->cmd1_path, pipex->cmd1, pipex->envp) == -1)
-			exit(1);
-		waitpid(pipex->pid, NULL, 0);
+			exit(127);
 	}
 	pipex->pid1 = fork();
 	if (pipex->pid1 == 0)
 	{
-		waitpid(pipex->pid, NULL, 0);
 		dup2(pipex->pipe_fd[0], STDIN_FILENO);
 		dup2(pipex->outfile, STDOUT_FILENO);
 		close(pipex->outfile);
 		close(pipex->infile);
 		close(pipex->pipe_fd[1]);
+		close(pipex->pipe_fd[0]);
 		if (execve(pipex->cmd2_path, pipex->cmd2, pipex->envp) == -1)
-			exit(1);
-		waitpid(pipex->pid1, NULL, 0);
+			exit(127);
 	}
+	close(pipex->pipe_fd[0]);
+    close(pipex->pipe_fd[1]);
+    waitpid(pipex->pid, NULL, 0);
+    waitpid(pipex->pid1, &pipex->code, 0);
 }
 
 void	null_check(char **av)
@@ -141,11 +153,11 @@ void	null_check(char **av)
 int	main(int ac, char **av, char **envp)
 {
 	t_pipe	pipex;
-
 	pipex.envp = envp;
 	if (ac == 5)
 	{
 		null_check(av);
+		pipex.path = NULL;
 		pipex.outfile = create_files(av[4], 0);
 		pipex.infile = create_files(av[1], 1);
 		pipex.cmd1 = ft_split(av[2], ' ');
@@ -160,7 +172,8 @@ int	main(int ac, char **av, char **envp)
 		free_path(pipex.cmd2);
 		free(pipex.cmd1_path);
 		free(pipex.cmd2_path);
-		return (0);
+		if (WIFEXITED(pipex.code))
+    		return(WEXITSTATUS(pipex.code));
 	}
 	else
 		write(2, "Error\n", 6);

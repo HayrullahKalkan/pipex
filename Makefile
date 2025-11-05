@@ -10,19 +10,16 @@ OBJS = $(SRCS:.c=.o)
 
 all: $(NAME)
 
-$(NAME): $(OBJS)
+$(NAME): $(OBJS) $(LIBFT)
 	$(CC) $(CFLAGS) $(OBJS) $(LIBFT) -o $(NAME)
 
 $(LIBFT):
 	make -C ./libft
 
-bonus:
-	$(CC) $(CFLAGS) $(SRCS) -o $(NAME)
-
 clean:
-	rm -f $(OBJS)
+	rm -f $(OBJS) $(LIBFT)
 
 fclean: clean
-	rm -f $(NAME)
+	rm -f $(NAME) $(LIBFT)
 
 re: fclean all
