@@ -1,9 +1,9 @@
 NAME = pipex
 
 CC = cc
-CFLAGS = -Wall -Wextra -Werror -g
+CFLAGS = -Wall -Wextra -Werror
 
-SRCS = main.c 
+SRCS = pipex.c pipex_utils.c checker.c
 LIBFT = ./libft/libft.a
 
 OBJS = $(SRCS:.c=.o)
@@ -17,9 +17,11 @@ $(LIBFT):
 	make -C ./libft
 
 clean:
-	rm -f $(OBJS) $(LIBFT)
+	rm -f $(OBJS)
+	make -C ./libft clean
 
 fclean: clean
-	rm -f $(NAME) $(LIBFT)
+	rm -f $(NAME)
+	make -C ./libft fclean
 
 re: fclean all
